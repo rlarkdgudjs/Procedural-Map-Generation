@@ -64,30 +64,71 @@ public class World : MonoBehaviour
     }
 
     // 해당 위치의 블록 타입을 결정
+    //public byte GetBlockType(in Vector3 worldPos)
+    //{
+
+    //    if (!IsBlockInWorld(worldPos))
+    //        return 0;
+
+    //    // 높이 0까지는 기반암
+    //    if (worldPos.y < 1)
+    //        return 1;//Bedrock;
+
+    //    // 맨 위 표면
+    //    if (worldPos.y >= VoxelData.ChunkHeight - 1)
+    //    {
+
+    //        float noise = Noise.Get2DPerlin(new Vector2(worldPos.x, worldPos.z), 0f, 0.1f);
+
+    //        if (noise < 0.5f)
+    //            return 2;//Grass;
+    //        else
+    //            return 3;//Sand;
+    //    }
+    //    // 표면 ~ 기반암 사이 : 돌멩이
+    //    else
+    //        return 4;//Stone;
+    //}
     public byte GetBlockType(in Vector3 worldPos)
     {
-        
+        // NOTE : 모든 값은 0보다 크거나 같기 때문에 Mathf.FloorToInt() 할 필요 없음
+
+        int yPos = (int)worldPos.y;
+
+        /* -----------------------------------------------
+                            Immutable Pass
+        ----------------------------------------------- */
+        // 월드 밖 : 공기
         if (!IsBlockInWorld(worldPos))
             return 0;
 
-        // 높이 0까지는 기반암
-        if (worldPos.y < 1)
-            return 1;//Bedrock;
+        // 높이 0은 기반암
+        if (yPos == 0)
+            return 1;
 
-        // 맨 위 표면
-        if (worldPos.y >= VoxelData.ChunkHeight - 1)
+        /* -----------------------------------------------
+                        Basic Terrain Pass
+        ----------------------------------------------- */
+        // noise : 0.0 ~ 1.0
+        float noise = Noise.Get2DPerlin(new Vector2(worldPos.x, worldPos.z), 500f, 0.25f);
+        float terrainHeight = (int)(VoxelData.ChunkHeight * noise);
+
+        // terrainHeight : 0 ~ VoxelData.ChunkHeight(15)
+
+        // 지면
+        if (yPos == terrainHeight)
         {
-
-            float noise = Noise.Get2DPerlin(new Vector2(worldPos.x, worldPos.z), 0f, 0.1f);
-            
-            if (noise < 0.5f)
-                return 2;//Grass;
-            else
-                return 3;//Sand;
+            return 2;
         }
-        // 표면 ~ 기반암 사이 : 돌멩이
+        // 땅속
+        else if (yPos < terrainHeight)
+        {
+            return 4;
+        }
         else
-            return 4;//Stone;
+        {
+            return 0;
+        }
     }
     /// <summary> 해당 위치의 복셀이 월드 내에 있는지 검사 </summary>
     private bool IsBlockInWorld(in Vector3 pos)
