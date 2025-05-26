@@ -37,7 +37,13 @@ public class Chunk
     {
         get { return chunkObject.transform.position; }
     }
-    
+
+    public bool IsActive
+    {
+        get => chunkObject.activeSelf;
+        set => chunkObject.SetActive(value);
+    }
+
 
     public Chunk(ChunkCoord coord,World world)
     {
@@ -68,7 +74,7 @@ public class Chunk
             {
                 for (int z = 0; z < VoxelData.ChunkWidth; z++)
                 {
-                    voxelMap[x, y, z] = world.GetBlockType(new Vector3(x, y, z));
+                    voxelMap[x, y, z] = world.GetBlockType(new Vector3(x, y, z)+position);
                     //if (y == 4) { voxelMap[x, y, z] = 0; }
                 }
             }
