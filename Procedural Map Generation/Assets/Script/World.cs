@@ -1,20 +1,24 @@
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+
 
 public class World : MonoBehaviour
 {
     public Material material;
     public BlockType[] blockTypes;
+    public BiomeData biome;
 
     private Chunk[,] chunks = new Chunk[VoxelData.WorldSizeInChunks, VoxelData.WorldSizeInChunks];
 
     public Transform player;
     public Vector3 spawnPosition;
 
-    // 이전 프레임에 활성화 되었던 청크 목록
-    private List<Chunk> prevActiveChunkList = new List<Chunk>();
-    // 현재 프레임에 활성화된 청크 목록
-    private List<Chunk> currentActiveChunkList = new List<Chunk>();
+ 
+    List<ChunkCoord> currentActiveChunkList = new List<ChunkCoord>();
+    private List<ChunkCoord> prevActiveChunkList = new List<ChunkCoord>();
+    private List<Chunk> chunksToCreate = new List<Chunk>();
+    private bool isCreatingChunks = false;
 
     // 플레이어의 이전 프레임 위치
     private ChunkCoord prevPlayerCoord;
@@ -30,6 +34,7 @@ public class World : MonoBehaviour
     {
         Random.InitState(seed); // 시드값 초기화
         InitPositions();
+        GenerateWorld(); // 월드 생성
         //GenerateWorld(); // 필요 X (UpdateChunksInViewRange()에서 수행)
     }
 
@@ -38,10 +43,14 @@ public class World : MonoBehaviour
         currentPlayerCoord = GetChunkCoordFromWorldPos(player.position);
 
         // 플레이어가 청크 위치를 이동한 경우, 시야 범위 갱신
-        if (!prevPlayerCoord.Equals(currentPlayerCoord))
-            UpdateChunksInViewRange();
+        if (!currentPlayerCoord.Equals(prevPlayerCoord))
+        {
+           
+            UpdateChunksInViewRange(); 
+        }
+        if (chunksToCreate.Count > 0 && !isCreatingChunks)
+            StartCoroutine("CreateChunks");
 
-        prevPlayerCoord = currentPlayerCoord;
     }
     private void GenerateWorld()
     {
@@ -53,14 +62,28 @@ public class World : MonoBehaviour
         {
             for (int z = viewMin; z < viewMax; z++)
             {
-                CreateNewChunk(x, z);
+                chunks[x, z] = new Chunk(new ChunkCoord(x, z), this, true);
+
+                //currentActiveChunkList.Add(chunks[x,z]);
             }
         }
     }
 
-    private void CreateNewChunk(int x, int z)
+    IEnumerator CreateChunks()
     {
-        chunks[x, z] = new Chunk(new ChunkCoord(x, z), this);
+        isCreatingChunks = true;
+        while (chunksToCreate.Count > 0)
+        {
+            chunksToCreate[0].Init();
+            chunksToCreate.RemoveAt(0);
+            yield return null;// 다음 프레임으로 넘어가기
+        }
+        isCreatingChunks = false;
+    }
+
+    private void CreateNewChunk(int x, int z,bool generate)
+    {
+        chunks[x, z] = new Chunk(new ChunkCoord(x, z), this,generate);
     }
 
     // 해당 위치의 블록 타입을 결정
@@ -94,6 +117,7 @@ public class World : MonoBehaviour
         // NOTE : 모든 값은 0보다 크거나 같기 때문에 Mathf.FloorToInt() 할 필요 없음
 
         int yPos = (int)worldPos.y;
+        byte blockType = 0; // 기본 블록 타입 (공기)
 
         /* -----------------------------------------------
                             Immutable Pass
@@ -110,10 +134,14 @@ public class World : MonoBehaviour
                         Basic Terrain Pass
         ----------------------------------------------- */
         // noise : 0.0 ~ 1.0
-        float noise = Noise.Get2DPerlin(new Vector2(worldPos.x, worldPos.z), 500f, 0.25f);
-        float terrainHeight = (int)(VoxelData.ChunkHeight * noise);
+        float noise = Noise.Get2DPerlin(new Vector2(worldPos.x, worldPos.z), 0f, biome.terrainScale);
+        float terrainHeight = (int)(biome.terrainHeightRange * noise) + biome.solidGroindHeight;
 
         // terrainHeight : 0 ~ VoxelData.ChunkHeight(15)
+        if (yPos > terrainHeight)
+        {
+            return 0;
+        }
 
         // 지면
         if (yPos == terrainHeight)
@@ -121,14 +149,35 @@ public class World : MonoBehaviour
             return 2;
         }
         // 땅속
-        else if (yPos < terrainHeight)
+        else if (terrainHeight - 4 < yPos && yPos < terrainHeight)
         {
-            return 4;
+            return 3;
         }
         else
         {
-            return 0;
+            blockType = 5;
+            
         }
+        /* --------------------------------------------- *
+        *              Second Terrain Pass              *
+        * --------------------------------------------- */
+
+        if (blockType == 5)
+        {
+            foreach (var lode in biome.lodes)
+            {
+                if ( lode.minHeight < yPos && yPos < lode.maxHeight)
+                {
+                    // 노이즈 값 : 0.0 ~ 1.0
+                    if(Noise.Get3DPerlin(worldPos, lode.noiseOffset, lode.scale, lode.threshold))
+                    {
+                        blockType = lode.blockID;
+                    }
+                }
+            }
+        }
+        return blockType;
+
     }
     /// <summary> 해당 위치의 복셀이 월드 내에 있는지 검사 </summary>
     private bool IsBlockInWorld(in Vector3 pos)
@@ -176,13 +225,14 @@ public class World : MonoBehaviour
     private void UpdateChunksInViewRange()
     {
         ChunkCoord coord = GetChunkCoordFromWorldPos(player.position);
+        prevPlayerCoord = currentPlayerCoord; // 이전 프레임의 플레이어 좌표 저장
         int viewDist = VoxelData.ViewDistanceInChunks;
         (int x, int z) viewMin = (coord.x - viewDist, coord.z - viewDist);
         (int x, int z) viewMax = (coord.x + viewDist, coord.z + viewDist);
 
         // 활성 목록 : 현재 -> 이전으로 이동
-        prevActiveChunkList = currentActiveChunkList;
-        currentActiveChunkList = new List<Chunk>();
+        List<ChunkCoord> prevActiveChunkList = new List<ChunkCoord>(currentActiveChunkList);
+        
 
         for (int x = viewMin.x; x < viewMax.x; x++)
         {
@@ -195,27 +245,29 @@ public class World : MonoBehaviour
                 // 시야 범위 내에 청크가 생성되지 않은 영역이 있을 경우, 새로 생성
                 if (chunks[x, z] == null)
                 { 
-                    CreateNewChunk(x, z);
-                    currentChunk = chunks[x,z];
+                    CreateNewChunk(x, z,false);
+                    currentChunk = chunks[x, z]; // 새로 생성된 청크 참조
+                    chunksToCreate.Add(currentChunk); // 청크 생성 대기열에 추가
                 }
                 else if (chunks[x,z].IsActive == false)
                 {
                     chunks[x, z].IsActive = true;
                 }
-                currentActiveChunkList.Add(currentChunk);
+                currentActiveChunkList.Add(new ChunkCoord(x,z));
 
-                if (prevActiveChunkList.Contains(currentChunk))
+                for (int i = 0; i < prevActiveChunkList.Count; i++)
                 {
-                  
-                    prevActiveChunkList.Remove(currentChunk);
+
+                    if (prevActiveChunkList[i].Equals(new ChunkCoord(x, z)))
+                        prevActiveChunkList.RemoveAt(i);
+
                 }
             }
 
-            foreach (var chunk in prevActiveChunkList)
-            {
-                chunk.IsActive = false; // 이전 프레임에 활성화된 청크는 비활성화
-            }
+            
         }
+        foreach (ChunkCoord c in prevActiveChunkList)
+            chunks[c.x, c.z].IsActive = false;
     }
     //private void UpdateChunksInViewRange2()
     //{

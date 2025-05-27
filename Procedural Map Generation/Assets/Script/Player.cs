@@ -1,54 +1,114 @@
+using System.Threading;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
 public class Player : MonoBehaviour
 {
 
-    [Header("Movement")]
-    public float moveSpeed = 5f;
+    /***********************************************************************
+   *                               Inspector Fields
+   ***********************************************************************/
+    #region .
+    [SerializeField] World world;
 
-    [Header("Mouse Look")]
-    public Transform cameraTransform;
-    public float mouseSensitivity = 2f;
-    private float xRotation = 0f;
+    [Range(1f, 10f)]
+    [SerializeField] private float walkSpeed = 5f;
 
-    private void Start()
+    [Range(-20, 1f)]
+    [SerializeField] private float gravity = -9.8f;
+
+    #endregion
+    /***********************************************************************
+    *                               Private Reference Fields
+    ***********************************************************************/
+    #region .
+    private Transform camTr;
+
+    #endregion
+    /***********************************************************************
+    *                               Private Fields
+    ***********************************************************************/
+    #region .
+    private float h;
+    private float v;
+    private float mouseX;
+    private float mouseY;
+    private float deltaTime;
+
+    private Vector3 velocity;
+
+    private float playerWidth = 0.3f;       // 플레이어의 XZ 반지름
+    private float boundsTolerance = 0.3f;
+    private float verticalMomentum = 0f;
+
+    private bool isGrounded = false;
+    private bool isJumping = false;
+    private bool isRunning = false;
+    private bool jumpRequested = false;
+
+    #endregion
+
+    private void Awake()
     {
+        Init();
+        
+    }
+    private void Start()
+    {   
         Cursor.lockState = CursorLockMode.Locked;
         Cursor.visible = false;
     }
     void Update()
     {
-        HandleMouseLook();
-        HandleMovement();
+        deltaTime = Time.deltaTime;
+        GetPlayerInputs();
+        CalculateVelocity();
+        MoveAndRotate();
+    }
+    private void Init()
+    {
+        var cam = GetComponentInChildren<Camera>();
+        camTr = cam.transform;
     }
 
-    void HandleMouseLook()
+    private void GetPlayerInputs()
     {
-        float mouseX = Input.GetAxis("Mouse X") * mouseSensitivity;
-        float mouseY = Input.GetAxis("Mouse Y") * mouseSensitivity;
+        h = Input.GetAxisRaw("Horizontal");
+        v = Input.GetAxisRaw("Vertical");
+        mouseX = Input.GetAxis("Mouse X");
+        mouseY = Input.GetAxis("Mouse Y");
+    }
 
-        // 좌우 회전은 플레이어 오브젝트가 아니라 카메라 부모 (또는 직접 카메라) 기준
+    private void CalculateVelocity()
+    {
+        velocity = ((transform.forward * v) + (transform.right * h)) * deltaTime * walkSpeed;
+        velocity += Vector3.up * CalculateDownSpeedAndSetGroundState(gravity * deltaTime); // 중력 적용, 바닥 인식
+    }
+
+    private void MoveAndRotate()
+    {
+        // Rotate
         transform.Rotate(Vector3.up * mouseX);
+        camTr.Rotate(Vector3.right * -mouseY);
 
-        // 상하 회전은 카메라만 회전
-        xRotation -= mouseY;
-        xRotation = Mathf.Clamp(xRotation, -90f, 90f);
-        cameraTransform.localRotation = Quaternion.Euler(xRotation, 0f, 0f);
+        // Move
+        transform.Translate(velocity, Space.World);
     }
-
-    void HandleMovement()
+    private float CalculateDownSpeedAndSetGroundState(float yVelocity)
     {
-        float moveX = Input.GetAxis("Horizontal"); // A/D
-        float moveZ = Input.GetAxis("Vertical");   // W/S
+        // playerWidth * 2를 변의 길이로 하는 XZ 평면 정사각형의 네 꼭짓점에서 하단으로 grounded 체크
+        // gounded 체크가 플레이어 회전의 영향을 받지 않도록, transform 로컬벡터가 아니라 월드벡터 기준으로 검사
+        // 즉, 플레이어가 회전해도 큐브 모양의 콜라이더가 회전하지 않는 효과
 
-        // 카메라의 전방/우측 방향을 기준으로 이동 (Y축 제거 후 정규화)
-        Vector3 camForward = cameraTransform.forward;
-        Vector3 camRight = cameraTransform.right;
+        Vector3 pos = transform.position;
 
-       
+        isGrounded =
+            world.IsBlockSolid(new Vector3(pos.x - playerWidth, pos.y + yVelocity, pos.z - playerWidth)) ||
+            world.IsBlockSolid(new Vector3(pos.x + playerWidth, pos.y + yVelocity, pos.z - playerWidth)) ||
+            world.IsBlockSolid(new Vector3(pos.x + playerWidth, pos.y + yVelocity, pos.z + playerWidth)) ||
+            world.IsBlockSolid(new Vector3(pos.x - playerWidth, pos.y + yVelocity, pos.z + playerWidth));
 
-        Vector3 move = camRight * moveX + camForward * moveZ;
-        transform.position += move * moveSpeed * Time.deltaTime;
+        return isGrounded ? 0 : yVelocity;
     }
+
 }

@@ -2,10 +2,14 @@ using UnityEngine;
 
 public static class VoxelData
 {
-    public static readonly int ChunkWidth = 5;
-    public static readonly int ChunkHeight = 5;
-    public static readonly int WorldSizeInChunks = 100;
-    public static readonly int ViewDistanceInChunks = 50;
+    // 청크 내의 X, Z 성분 복셀 개수
+    public static readonly int ChunkWidth = 16;
+    // 청크 내의 Y 성분 복셀 개수
+    public static readonly int ChunkHeight = 128;
+    /// <summary> 월드의 각 X, Z 성분 청크 개수 </summary>
+    public static readonly int WorldSizeInChunks = 10000;
+
+    public static readonly int ViewDistanceInChunks = 5;
     public static int WorldSizeInVoxels
     { get { return WorldSizeInChunks * ChunkWidth; } }
 

@@ -1,4 +1,5 @@
 using System;
+using System.CodeDom.Compiler;
 using System.Collections.Generic;
 using UnityEngine;
 using static UnityEditor.Searcher.SearcherWindow.Alignment;
@@ -12,6 +13,27 @@ public class ChunkCoord
     {
         this.x = x;
         this.z = z;
+    }
+    public ChunkCoord(Vector3 pos)
+    {
+
+        int xCheck = Mathf.FloorToInt(pos.x);
+        int zCheck = Mathf.FloorToInt(pos.z);
+
+        x = xCheck / VoxelData.ChunkWidth;
+        z = zCheck / VoxelData.ChunkWidth;
+
+    }
+    public override bool Equals(object obj)
+    {
+        return Equals(obj as ChunkCoord); // 캐스팅 후 아래 메서드 호출
+    }
+
+    public bool Equals(ChunkCoord other)
+    {
+        // null 체크는 여기서만
+        if (other is null) return false;
+        return this.x == other.x && this.z == other.z;
     }
 }
 public class Chunk 
@@ -31,6 +53,7 @@ public class Chunk
     List<int> triangles = new List<int>();
     List<Vector2> uvs = new List<Vector2>();
 
+    private bool _isActive; // 청크가 활성화 상태인지 여부
     private World world;
 
     public Vector3 position
@@ -40,16 +63,31 @@ public class Chunk
 
     public bool IsActive
     {
-        get => chunkObject.activeSelf;
-        set => chunkObject.SetActive(value);
+
+        get { return _isActive; }
+        set
+        {
+
+            _isActive = value;
+            if (chunkObject != null)
+                chunkObject.SetActive(value);
+
+        }
+
     }
-
-
-    public Chunk(ChunkCoord coord,World world)
+    public Chunk(ChunkCoord coord, World world, bool generate)
     {
         this.coord = coord;
         this.world = world;
 
+        if (generate)
+        {
+            Init();
+        }
+    }
+
+    public void Init()
+    {
         chunkObject = new GameObject();
         meshRenderer = chunkObject.AddComponent<MeshRenderer>();
         meshFilter = chunkObject.AddComponent<MeshFilter>();
@@ -89,7 +127,8 @@ public class Chunk
             {
                 for (int z = 0; z < VoxelData.ChunkWidth; z++)
                 {
-                    AddVoxelDataToChunk(new Vector3(x, y, z));
+                    if (world.blockTypes[voxelMap[x, y, z]].isSolid)
+                        AddVoxelDataToChunk(new Vector3(x, y, z));
                 }
             }
         }
@@ -145,6 +184,7 @@ public class Chunk
             y < 0 || y >= VoxelData.ChunkHeight - 1 ||
             z < 0 || z >= VoxelData.ChunkWidth - 1)
         {
+           
             return false;
         }
         else
@@ -158,10 +198,8 @@ public class Chunk
         int z = Mathf.FloorToInt(pos.z);
 
         // 맵 범위를 벗어나는 경우
-        if (x < 0 || x > VoxelData.ChunkWidth - 1 ||
-           y < 0 || y > VoxelData.ChunkHeight - 1 ||
-           z < 0 || z > VoxelData.ChunkWidth - 1)
-            return false;
+        if (!IsVoxelInChunk(x, y, z))
+            return world.IsBlockSolid(pos+position);
 
         // voxelMap[]의 값은 blockTypes[]의 인덱스로 사용하여,
         // 참조한 블록 타입에서 isSolid 값을 읽어온다.
