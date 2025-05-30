@@ -1,6 +1,9 @@
+using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Threading;
 using UnityEngine;
+using static UnityEngine.Mesh;
 
 
 public class World : MonoBehaviour
@@ -27,12 +30,51 @@ public class World : MonoBehaviour
 
     public int setting = 0;
 
+    #region Thread
+    private readonly Queue<Action> mainThreadActions = new Queue<Action>();
+    public void EnqueueMainThreadAction(Action action)
+    {
+
+        lock (mainThreadActions)
+        {
+            mainThreadActions.Enqueue(action);
+        }
+    }
+
+    public void RequestChunkGeneration(ChunkCoord coord)
+    {
+
+        ThreadPool.QueueUserWorkItem((_) =>
+        {
+            byte[,,] voxelMap = new byte[VoxelData.ChunkWidth, VoxelData.ChunkHeight, VoxelData.ChunkWidth];
+            for (int y = 0; y < VoxelData.ChunkHeight; y++)
+            {
+                for (int x = 0; x < VoxelData.ChunkWidth; x++)
+                {
+                    for (int z = 0; z < VoxelData.ChunkWidth; z++)
+                    {
+                        Vector3 worldPos = new Vector3(x + coord.x * VoxelData.ChunkWidth, y, z + coord.z * VoxelData.ChunkWidth);
+                        voxelMap[x, y, z] = GetBlockType(worldPos);
+                    }
+                }
+            }
+            ChunkMeshData meshData = ChunkMeshBuilder.Build(voxelMap, this);
+
+            EnqueueMainThreadAction(() =>
+            {
+                
+                Chunk chunk = new Chunk(coord, this, voxelMap, meshData);
+                chunk.Init();
+            });
+        });
+    }
+    #endregion
     // Start is called once before the first execution of Update after the MonoBehaviour is created
     [Space]
     public int seed = 0; // 시드값 (노이즈 생성에 사용)
     private void Start()
     {
-        Random.InitState(seed); // 시드값 초기화
+        UnityEngine.Random.InitState(seed); // 시드값 초기화
         InitPositions();
          // 월드 생성
         //GenerateWorld(); // 필요 X (UpdateChunksInViewRange()에서 수행)
@@ -41,16 +83,21 @@ public class World : MonoBehaviour
     private void Update()
     {
         currentPlayerCoord = GetChunkCoordFromWorldPos(player.position);
-
+        lock (mainThreadActions)
+        {
+            while (mainThreadActions.Count > 0)
+            {
+                var action = mainThreadActions.Dequeue();
+                action?.Invoke();
+            }
+        }
         // 플레이어가 청크 위치를 이동한 경우, 시야 범위 갱신
         if (!currentPlayerCoord.Equals(prevPlayerCoord))
         {
 
             UpdateChunksInViewRange();
         }
-        if (chunksToCreate.Count > 0 && !isCreatingChunks)
-            StartCoroutine("CreateChunks");
-
+        
     }
     
 
@@ -66,16 +113,16 @@ public class World : MonoBehaviour
         isCreatingChunks = false;
     }
 
-    private void CreateNewChunk(int x, int z,bool generate)
-    {
-        ChunkCoord coord = new ChunkCoord(x, z);
-        if (!chunks.ContainsKey(coord)) // 청크가 이미 생성되어 있는지 확인
-        {
-            Chunk newChunk = new Chunk(coord, this, generate);
-            chunks.Add(coord, newChunk); // 청크를 딕셔너리에 추가
-        }
+    //private void CreateNewChunk(int x, int z,bool generate)
+    //{
+    //    ChunkCoord coord = new ChunkCoord(x, z);
+    //    if (!chunks.ContainsKey(coord)) // 청크가 이미 생성되어 있는지 확인
+    //    {
+    //        Chunk newChunk = new Chunk(coord, this, voxelMap, meshData);
+    //        chunks.Add(coord, newChunk); // 청크를 딕셔너리에 추가
+    //    }
         
-    }
+    //}
 
     // 해당 위치의 블록 타입을 결정
     //public byte GetBlockType(in Vector3 worldPos)
@@ -229,18 +276,18 @@ public class World : MonoBehaviour
             {
                 ChunkCoord coord = new ChunkCoord(x, z);
 
-       
+
                 // 시야 범위 내에 청크가 생성되지 않은 영역이 있을 경우, 새로 생성
-                if (!chunks.TryGetValue(coord, out Chunk chunk))
+                if (!chunks.ContainsKey(coord)) // 청크가 아직 없으면
                 {
-                    CreateNewChunk(x, z, false);
-                    chunk = chunks[coord];
-                    chunksToCreate.Add(chunk);
+                    chunks.Add(coord, null); // 자리만 먼저 만들어놓고
+                    RequestChunkGeneration(coord); // 스레드에서 청크 생성 요청
                 }
-                else if (!chunk.IsActive)
+                else if (chunks[coord]!=null&&!chunks[coord].IsActive)
                 {
-                    chunk.IsActive = true;
+                    chunks[coord].IsActive = true;
                 }
+
                 currentActiveChunkList.Add(coord);
 
                 for (int i = 0; i < prevActiveChunkList.Count; i++)
@@ -258,7 +305,7 @@ public class World : MonoBehaviour
         {
             if(chunks.TryGetValue(c, out Chunk chunk))
             {
-               
+                    if(chunk != null) // 청크가 존재하고 활성화되어 있다면
                     chunk.IsActive = false; // 비활성화
                 
             }

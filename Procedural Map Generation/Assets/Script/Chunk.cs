@@ -1,6 +1,7 @@
 using System;
 using System.CodeDom.Compiler;
 using System.Collections.Generic;
+using System.Threading.Tasks;
 using UnityEngine;
 using static UnityEditor.Searcher.SearcherWindow.Alignment;
 
@@ -56,6 +57,7 @@ public class Chunk
 
     private byte[,,] voxelMap =
   new byte[VoxelData.ChunkWidth, VoxelData.ChunkHeight, VoxelData.ChunkWidth];
+    private ChunkMeshData meshData; // 
 
     int vertexIndex = 0;
     List<Vector3> vertices = new List<Vector3>();
@@ -84,15 +86,13 @@ public class Chunk
         }
 
     }
-    public Chunk(ChunkCoord coord, World world, bool generate)
+    public Chunk(ChunkCoord coord, World world, byte[,,] voxelMap, ChunkMeshData meshData)
     {
         this.coord = coord;
         this.world = world;
 
-        if (generate)
-        {
-            Init();
-        }
+        this.voxelMap = voxelMap;
+        this.meshData = meshData;
     }
 
     public void Init()
@@ -100,16 +100,14 @@ public class Chunk
         chunkObject = new GameObject();
         meshRenderer = chunkObject.AddComponent<MeshRenderer>();
         meshFilter = chunkObject.AddComponent<MeshFilter>();
-
         meshRenderer.material = this.world.material;
+
         chunkObject.transform.SetParent(world.transform);
         chunkObject.transform.position =
         new Vector3(coord.x * VoxelData.ChunkWidth, 0f, coord.z * VoxelData.ChunkWidth);
         chunkObject.name = $"Chunk [{coord.x}, {coord.z}]";
 
-        PopulateVoxelMap();
-        CreateMeshData();
-        CreateMesh();
+        CreateMeshByMeshData();
     }
 
 
@@ -142,12 +140,24 @@ public class Chunk
             }
         }
     }
+
     void CreateMesh()
     {
         Mesh mesh = new Mesh();
         mesh.vertices = vertices.ToArray();
         mesh.triangles = triangles.ToArray();
         mesh.uv = uvs.ToArray();
+        mesh.RecalculateNormals();
+        meshFilter.mesh = mesh;
+
+    }
+
+    void CreateMeshByMeshData()
+    {
+        Mesh mesh = new Mesh();
+        mesh.vertices = meshData.vertices.ToArray();
+        mesh.triangles = meshData.triangles.ToArray();
+        mesh.uv = meshData.uvs.ToArray();
         mesh.RecalculateNormals();
         meshFilter.mesh = mesh;
 
@@ -192,8 +202,9 @@ public class Chunk
         if (x < 0 || x >= VoxelData.ChunkWidth - 1 ||
             y < 0 || y >= VoxelData.ChunkHeight - 1 ||
             z < 0 || z >= VoxelData.ChunkWidth - 1)
-        {
-           
+        {   
+            
+
             return false;
         }
         else
@@ -257,8 +268,5 @@ public class Chunk
     {
         return voxelMap[(int)pos.x, (int)pos.y, (int)pos.z];
     }
-//    private bool IsSolid(in Vector3 pos)
-//{
-//    return world.IsBlockSolid(pos + WorldPos);
-//}
+   
 }
