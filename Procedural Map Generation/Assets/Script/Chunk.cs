@@ -4,7 +4,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using static UnityEditor.Searcher.SearcherWindow.Alignment;
 
-public class ChunkCoord
+public struct ChunkCoord : IEquatable<ChunkCoord>
 {
     public int x;
     public int z;
@@ -24,15 +24,24 @@ public class ChunkCoord
         z = zCheck / VoxelData.ChunkWidth;
 
     }
+
+    public override int GetHashCode()
+    {
+        // x와 z를 조합하여 해시코드 생성
+        return HashCode.Combine(x, z);
+    }
     public override bool Equals(object obj)
     {
-        return Equals(obj as ChunkCoord); // 캐스팅 후 아래 메서드 호출
+        if (obj is ChunkCoord other)
+            return Equals(other);
+        return false; // 캐스팅 후 아래 메서드 호출
     }
+
 
     public bool Equals(ChunkCoord other)
     {
         // null 체크는 여기서만
-        if (other is null) return false;
+        
         return this.x == other.x && this.z == other.z;
     }
 }

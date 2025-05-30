@@ -9,8 +9,8 @@ public class World : MonoBehaviour
     public BlockType[] blockTypes;
     public BiomeData biome;
 
-    private Chunk[,] chunks = new Chunk[VoxelData.WorldSizeInChunks, VoxelData.WorldSizeInChunks];
-
+    //private Chunk[,] chunks = new Chunk[VoxelData.WorldSizeInChunks, VoxelData.WorldSizeInChunks];
+    private Dictionary<ChunkCoord, Chunk> chunks = new Dictionary<ChunkCoord, Chunk>();
     public Transform player;
     public Vector3 spawnPosition;
 
@@ -34,7 +34,7 @@ public class World : MonoBehaviour
     {
         Random.InitState(seed); // 시드값 초기화
         InitPositions();
-        GenerateWorld(); // 월드 생성
+         // 월드 생성
         //GenerateWorld(); // 필요 X (UpdateChunksInViewRange()에서 수행)
     }
 
@@ -45,29 +45,14 @@ public class World : MonoBehaviour
         // 플레이어가 청크 위치를 이동한 경우, 시야 범위 갱신
         if (!currentPlayerCoord.Equals(prevPlayerCoord))
         {
-           
-            UpdateChunksInViewRange(); 
+
+            UpdateChunksInViewRange();
         }
         if (chunksToCreate.Count > 0 && !isCreatingChunks)
             StartCoroutine("CreateChunks");
 
     }
-    private void GenerateWorld()
-    {
-        int center = VoxelData.WorldSizeInChunks / 2;
-        int viewMin = center - VoxelData.ViewDistanceInChunks;
-        int viewMax = center + VoxelData.ViewDistanceInChunks;
-
-        for (int x = viewMin; x < viewMax; x++)
-        {
-            for (int z = viewMin; z < viewMax; z++)
-            {
-                chunks[x, z] = new Chunk(new ChunkCoord(x, z), this, true);
-
-                //currentActiveChunkList.Add(chunks[x,z]);
-            }
-        }
-    }
+    
 
     IEnumerator CreateChunks()
     {
@@ -83,7 +68,13 @@ public class World : MonoBehaviour
 
     private void CreateNewChunk(int x, int z,bool generate)
     {
-        chunks[x, z] = new Chunk(new ChunkCoord(x, z), this,generate);
+        ChunkCoord coord = new ChunkCoord(x, z);
+        if (!chunks.ContainsKey(coord)) // 청크가 이미 생성되어 있는지 확인
+        {
+            Chunk newChunk = new Chunk(coord, this, generate);
+            chunks.Add(coord, newChunk); // 청크를 딕셔너리에 추가
+        }
+        
     }
 
     // 해당 위치의 블록 타입을 결정
@@ -180,14 +171,17 @@ public class World : MonoBehaviour
 
     }
     /// <summary> 해당 위치의 복셀이 월드 내에 있는지 검사 </summary>
-    private bool IsBlockInWorld(in Vector3 pos)
+    //private bool IsBlockInWorld(in Vector3 pos)
+    //{
+
+    //    return pos.x >= 0 && pos.x < VoxelData.WorldSizeInVoxels &&
+    //           pos.y >= 0 && pos.y < VoxelData.ChunkHeight &&
+    //           pos.z >= 0 && pos.z < VoxelData.WorldSizeInVoxels;
+    //}
+    private bool IsBlockInWorld(Vector3 pos)
     {
-        
-        return pos.x >= 0 && pos.x < VoxelData.WorldSizeInVoxels &&
-               pos.y >= 0 && pos.y < VoxelData.ChunkHeight &&
-               pos.z >= 0 && pos.z < VoxelData.WorldSizeInVoxels;
+        return pos.y >= 0 && pos.y < VoxelData.ChunkHeight;
     }
-    
 
     /// <summary> 해당 위치의 블록이 단단한지 검사</summary>
     public bool IsBlockSolid(in Vector3 worldPos)
@@ -209,11 +203,7 @@ public class World : MonoBehaviour
 
     private void InitPositions()
     {
-        spawnPosition = new Vector3(
-            VoxelData.WorldSizeInVoxels * 0.5f,
-            VoxelData.ChunkHeight,
-            VoxelData.WorldSizeInVoxels * 0.5f
-        );
+        spawnPosition = new Vector3(0.5f, VoxelData.ChunkHeight, 0.5f);
         player.position = spawnPosition;
 
         prevPlayerCoord = new ChunkCoord(-1, -1);
@@ -224,41 +214,39 @@ public class World : MonoBehaviour
     /// <summary> 시야범위 내의 청크 생성 </summary>
     private void UpdateChunksInViewRange()
     {
-        ChunkCoord coord = GetChunkCoordFromWorldPos(player.position);
+        ChunkCoord centerCoord = GetChunkCoordFromWorldPos(player.position);
         prevPlayerCoord = currentPlayerCoord; // 이전 프레임의 플레이어 좌표 저장
         int viewDist = VoxelData.ViewDistanceInChunks;
-        (int x, int z) viewMin = (coord.x - viewDist, coord.z - viewDist);
-        (int x, int z) viewMax = (coord.x + viewDist, coord.z + viewDist);
+        
 
         // 활성 목록 : 현재 -> 이전으로 이동
         List<ChunkCoord> prevActiveChunkList = new List<ChunkCoord>(currentActiveChunkList);
         
 
-        for (int x = viewMin.x; x < viewMax.x; x++)
+        for (int x = centerCoord.x-viewDist; x < centerCoord.x + viewDist; x++)
         {
-            for (int z = viewMin.z; z < viewMax.z; z++)
+            for (int z = centerCoord.z - viewDist; z < centerCoord.z + viewDist; z++)
             {
-                // 청크 좌표가 월드 범위 내에 있는지 검사
-                if (IsChunkPosInWorld(x, z) == false)
-                    continue;
-                Chunk currentChunk = chunks[x, z];
+                ChunkCoord coord = new ChunkCoord(x, z);
+
+       
                 // 시야 범위 내에 청크가 생성되지 않은 영역이 있을 경우, 새로 생성
-                if (chunks[x, z] == null)
-                { 
-                    CreateNewChunk(x, z,false);
-                    currentChunk = chunks[x, z]; // 새로 생성된 청크 참조
-                    chunksToCreate.Add(currentChunk); // 청크 생성 대기열에 추가
-                }
-                else if (chunks[x,z].IsActive == false)
+                if (!chunks.TryGetValue(coord, out Chunk chunk))
                 {
-                    chunks[x, z].IsActive = true;
+                    CreateNewChunk(x, z, false);
+                    chunk = chunks[coord];
+                    chunksToCreate.Add(chunk);
                 }
-                currentActiveChunkList.Add(new ChunkCoord(x,z));
+                else if (!chunk.IsActive)
+                {
+                    chunk.IsActive = true;
+                }
+                currentActiveChunkList.Add(coord);
 
                 for (int i = 0; i < prevActiveChunkList.Count; i++)
                 {
 
-                    if (prevActiveChunkList[i].Equals(new ChunkCoord(x, z)))
+                    if (prevActiveChunkList[i].Equals(coord))
                         prevActiveChunkList.RemoveAt(i);
 
                 }
@@ -267,7 +255,16 @@ public class World : MonoBehaviour
             
         }
         foreach (ChunkCoord c in prevActiveChunkList)
-            chunks[c.x, c.z].IsActive = false;
+        {
+            if(chunks.TryGetValue(c, out Chunk chunk))
+            {
+               
+                    chunk.IsActive = false; // 비활성화
+                
+            }
+            
+        }
+    }
     }
     //private void UpdateChunksInViewRange2()
     //{
@@ -291,4 +288,4 @@ public class World : MonoBehaviour
     //    }
     //}
 
-}
+
