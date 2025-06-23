@@ -11,7 +11,7 @@ public class ChunkMeshData
 public static class ChunkMeshBuilder 
 {
     // Start is called once before the first execution of Update after the MonoBehaviour is created
-   public static ChunkMeshData Build(byte[,,] voxelMap, World world)
+    public static ChunkMeshData Build(byte[,,] voxelMap, World world,Vector3 chunkOrig)
     {
 
         var data = new ChunkMeshData();
@@ -30,7 +30,7 @@ public static class ChunkMeshBuilder
                     for (int p = 0; p<6; p++)
                     {
                         // Check if the face is visible
-                        if ( !IsVoxelSolid(pos + VoxelData.faceChecks[p],voxelMap,world) && IsVoxelSolid(pos, voxelMap, world))
+                        if ( !IsVoxelSolid(pos + VoxelData.faceChecks[p],voxelMap,world,chunkOrig) && IsVoxelSolid(pos, voxelMap, world,chunkOrig))
                         {
                             // Add vertices for the face
                             for (int i = 0; i <= 3; i++)
@@ -55,7 +55,7 @@ public static class ChunkMeshBuilder
         }
         return data;
     }
-    private static bool IsVoxelSolid(Vector3 pos, byte[,,] voxelMap, World world)
+    private static bool IsVoxelSolid(Vector3 pos, byte[,,] voxelMap, World world,Vector3 chunkOrig)
     {
         int x = (int)pos.x;
         int y = (int)pos.y;
@@ -65,7 +65,7 @@ public static class ChunkMeshBuilder
             y < 0 || y >= VoxelData.ChunkHeight ||
             z < 0 || z >= VoxelData.ChunkWidth)
         {
-            return world.IsBlockSolid(pos); // 외부 청크는 world에서 체크
+            return world.IsBlockSolid(pos+chunkOrig); // 외부 청크는 world에서 체크
         }
 
         return world.blockTypes[voxelMap[x, y, z]].isSolid;

@@ -58,7 +58,8 @@ public class World : MonoBehaviour
                     }
                 }
             }
-            ChunkMeshData meshData = ChunkMeshBuilder.Build(voxelMap, this);
+            Vector3 chunkOrig = new Vector3(coord.x * VoxelData.ChunkWidth, 0f, coord.z * VoxelData.ChunkWidth);
+            ChunkMeshData meshData = ChunkMeshBuilder.Build(voxelMap, this,chunkOrig);
 
             EnqueueMainThreadAction(() =>
             {
