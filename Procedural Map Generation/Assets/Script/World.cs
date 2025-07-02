@@ -24,9 +24,9 @@ public class World : MonoBehaviour
     private bool isCreatingChunks = false;
 
     // 플레이어의 이전 프레임 위치
-    private ChunkCoord prevPlayerCoord;
+    private (int,int) prevPlayerCoord;
     // 플레이어의 현재 프레임 위치
-    private ChunkCoord currentPlayerCoord;
+    private (int,int) currentPlayerCoord;
 
     public int setting = 0;
 
@@ -65,6 +65,7 @@ public class World : MonoBehaviour
             {
                 
                 Chunk chunk = new Chunk(coord, this, voxelMap, meshData);
+                chunks[coord] = chunk; // 청크를 딕셔너리에 추가
                 chunk.Init();
             });
         });
@@ -242,11 +243,11 @@ public class World : MonoBehaviour
         return x >= 0 && x < VoxelData.WorldSizeInChunks &&
                z >= 0 && z < VoxelData.WorldSizeInChunks;
     }
-    private ChunkCoord GetChunkCoordFromWorldPos(in Vector3 worldPos)
+    private (int,int) GetChunkCoordFromWorldPos(in Vector3 worldPos)
     {
         int x = (int)(worldPos.x / VoxelData.ChunkWidth);
         int z = (int)(worldPos.z / VoxelData.ChunkWidth);
-        return new ChunkCoord(x, z);
+        return (x, z);
     }
 
     private void InitPositions()
@@ -254,7 +255,7 @@ public class World : MonoBehaviour
         spawnPosition = new Vector3(0.5f, VoxelData.ChunkHeight, 0.5f);
         player.position = spawnPosition;
 
-        prevPlayerCoord = new ChunkCoord(-1, -1);
+        prevPlayerCoord = (-1, -1);
         currentPlayerCoord = GetChunkCoordFromWorldPos(player.position);
     }
 
@@ -262,14 +263,15 @@ public class World : MonoBehaviour
     /// <summary> 시야범위 내의 청크 생성 </summary>
     private void UpdateChunksInViewRange()
     {
-        ChunkCoord centerCoord = GetChunkCoordFromWorldPos(player.position);
-        prevPlayerCoord = currentPlayerCoord; // 이전 프레임의 플레이어 좌표 저장
+        var location = GetChunkCoordFromWorldPos(player.position);
+        ChunkCoord centerCoord = new ChunkCoord(location.Item1,location.Item2);
+        prevPlayerCoord = currentPlayerCoord; // 기준 좌표 갱신
         int viewDist = VoxelData.ViewDistanceInChunks;
         
 
         // 활성 목록 : 현재 -> 이전으로 이동
         List<ChunkCoord> prevActiveChunkList = new List<ChunkCoord>(currentActiveChunkList);
-        
+        currentActiveChunkList.Clear();
 
         for (int x = centerCoord.x-viewDist; x < centerCoord.x + viewDist; x++)
         {
