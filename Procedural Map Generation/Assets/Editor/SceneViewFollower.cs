@@ -5,20 +5,38 @@ using UnityEngine;
 [InitializeOnLoad]
 public static class SceneViewFollower
 {
-    // 현재 따라갈 타깃
     private static Transform followTarget;
+    private static bool isFollowing = true;  // 따라가기 모드 on/off
 
     static SceneViewFollower()
     {
-        // 에디터 업데이트마다 호출
         EditorApplication.update += OnEditorUpdate;
-        // 선택이 변경될 때마다 타깃 설정
         Selection.selectionChanged += OnSelectionChanged;
     }
 
-    // 선택된 Transform이 있으면 타깃으로 지정
+    // 메뉴에서 토글 가능
+    [MenuItem("Tools/SceneView Follower/Follow Selected %#f")]
+    private static void ToggleFollow()
+    {
+        isFollowing = !isFollowing;
+        if (!isFollowing)
+            followTarget = null;    // 해제 시 타깃 클리어
+        // 메뉴에 체크 표시 업데이트
+        Menu.SetChecked("Tools/SceneView Follower/Follow Selected", isFollowing);
+    }
+
+    // 메뉴 활성화 상태 표시
+    [MenuItem("Tools/SceneView Follower/Follow Selected %#f", true)]
+    private static bool ToggleFollowValidate()
+    {
+        Menu.SetChecked("Tools/SceneView Follower/Follow Selected", isFollowing);
+        return true;
+    }
+
+    // 선택한 오브젝트가 있을 때만 타깃으로 지정
     private static void OnSelectionChanged()
     {
+        if (!isFollowing) return;
         if (Selection.activeTransform != null)
             followTarget = Selection.activeTransform;
     }
@@ -26,15 +44,12 @@ public static class SceneViewFollower
     // 에디터 업데이트 루프
     private static void OnEditorUpdate()
     {
-        if (followTarget == null)
+        if (!isFollowing || followTarget == null)
             return;
 
-        // 마지막 활성화된 SceneView 가져오기
-        SceneView sceneView = SceneView.lastActiveSceneView;
-        if (sceneView == null)
-            return;
+        var sceneView = SceneView.lastActiveSceneView;
+        if (sceneView == null) return;
 
-        // 카메라 위치(pivot)를 타깃 위치로 업데이트
         sceneView.pivot = followTarget.position;
         sceneView.Repaint();
     }
