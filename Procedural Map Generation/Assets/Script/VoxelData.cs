@@ -3,7 +3,7 @@ using UnityEngine;
 public static class VoxelData
 {
     // 청크 내의 X, Z 성분 복셀 개수
-    public static readonly int ChunkWidth = 16;
+    public static readonly int ChunkWidth = 32;
     // 청크 내의 Y 성분 복셀 개수
     public static readonly int ChunkHeight = 128;
     /// <summary> 월드의 각 X, Z 성분 청크 개수 </summary>
